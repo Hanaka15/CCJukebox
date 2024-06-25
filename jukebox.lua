@@ -51,7 +51,7 @@ function loadDisks()
     for slot=1, chest.size() do
         local item = chest.getItemDetail(slot)
         if item and item.name:find("music_disc") then
-            local title = item.displayName or "Unknown Disk"
+            local title = item.displayName or item.name:gsub("music_disc_", "Music Disk - ") or "Unknown Disk"
             disks[#disks+1] = title
             diskSlots[#disks] = slot
             
