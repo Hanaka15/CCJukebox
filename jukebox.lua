@@ -58,6 +58,12 @@ function loadDisks()
             end
         end
     end
+    
+    -- Print disk information to chat
+    print("Loaded disks:")
+    for k, v in ipairs(disks) do
+        print(k .. ": " .. v.displayName .. " in slot " .. v.slot)
+    end
 end
 
 -- Initial load of disks
