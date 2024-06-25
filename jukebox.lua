@@ -1,7 +1,16 @@
-disk.stopAudio() --stop all currently playing disks
+-- Initialize variables and peripherals
+local disks = {}  -- Global array to store disk details {displayName, audioTitle, slot, length}
+local drive = peripheral.wrap("right")  -- Adjust disk drive side as per your setup
+local chest = peripheral.find("minecraft:chest")  -- Adjust chest side as per your setup
+local mon = peripheral.wrap("top")  -- Adjust monitor side as per your setup
+
+-- Check if peripherals are found
+if not drive or not chest or not mon then
+    error("Drive, chest, or monitor not found")
+end
 
 -- Lengths dictionary with known disk lengths
-lengths = {
+local lengths = {
     ["C418 - 13"] = 180,
     ["C418 - cat"] = 187,
     ["C418 - blocks"] = 347,
@@ -17,130 +26,69 @@ lengths = {
 }
 
 -- Default length for unknown disks
-DEFAULT_LENGTH = 200
+local DEFAULT_LENGTH = 200
 
--- Wrap the peripherals
-per = peripheral.getNames()
-drive = nil
-chest = nil
-mon = nil
-
-for k,v in pairs(per) do
-    if peripheral.getType(v) == "drive" then
-        drive = peripheral.wrap(v)
-    elseif peripheral.getType(v) == "monitor" then
-        mon = peripheral.wrap(v)
-    elseif peripheral.getType(v) == "minecraft:chest" then
-        chest = peripheral.wrap(v)
-    end
-end
-per = nil
-
--- Check if peripherals are found
-if not drive or not chest or not mon then
-    error("Drive, chest, or monitor not found")
-end
-
-disks = {} -- array of disk details {displayName, slot}
-
--- Function to load disks from the chest
-function loadDisks()
-    disks = {}
+-- Function to load disks from chest into disk drive
+local function loadDisks()
+    disks = {}  -- Clear existing disks array
+    
     for slot = 1, chest.size() do
         local item = chest.getItemDetail(slot)
-        if item and item.name:find("music_disc") then
-            local displayName = item.displayName or "Unknown Disk"
-            disks[#disks + 1] = {displayName = displayName, slot = slot}
+        if item then
+            -- Push disk into disk drive
+            chest.pushItems("right", slot)
             
-            -- Apply default length if the disk is unknown
-            if lengths[displayName] == nil then
-                lengths[displayName] = DEFAULT_LENGTH
-            end
+            -- Wait briefly to ensure disk is loaded (adjust timing as needed)
+            os.sleep(1)  -- Adjust sleep time if necessary
+            
+            -- Get audio title of the disk in the disk drive
+            local audioTitle = drive.getAudioTitle()
+            
+            -- Eject disk from the disk drive
+            chest.pullItems("right", 1)
+            
+            -- Determine display name (use DEFAULT_LENGTH if not found in lengths)
+            local displayName = item.displayName or "Unknown Disk"
+            local length = lengths[displayName] or DEFAULT_LENGTH
+            
+            -- Store disk details in disks table
+            disks[#disks + 1] = {displayName = displayName, audioTitle = audioTitle, slot = slot, length = length}
         end
     end
     
-    -- Print disk information to chat
+    -- Print loaded disks to console
     print("Loaded disks:")
     for k, v in ipairs(disks) do
-        print(k .. ": " .. v.displayName .. " in slot " .. v.slot)
+        print(k .. ": " .. v.audioTitle .. " in slot " .. v.slot)
     end
 end
 
 -- Initial load of disks
 loadDisks()
 
-track = 1 -- selected track
-timer = 0 -- token of the timer that signals the end of a track
-playing = false -- indicates if a disk is currently playing
-shuffle = true -- when true; selects a random track when track is over
+-- Get size of the monitor terminal
+local screenWidth, screenHeight = mon.getSize()
 
-function restart() -- restarts playback
-    stop()
-    play()
-end
+-- Variable to track currently selected track (for UI display)
+local selectedTrack = 1
 
-function stop() -- stops playback
-    playing = false
-    os.cancelTimer(timer)
-    drive.stopAudio()
-end
-
-function play() -- starts playback
-    if not disks[track] then
-        return -- if no disks are loaded, do nothing
-    end
-    
-    local slot = disks[track].slot
-    chest.pushItems(peripheral.getName(drive), slot, 1, 1)
-    os.sleep(1) -- Wait for the disk to transfer
-    playing = true
-    timer = os.startTimer(lengths[disks[track].displayName])
-    drive.playAudio()
-end
-
-function skip() -- skips to the next track
-    track = track + 1
-    if track > #disks then
-        track = 1
-    end
-    restart()
-end
-
-function back() -- goes back to the previous track
-    track = track - 1
-    if track < 1 then
-        track = #disks
-    end
-    restart()
-end
-
-function skipto(tr) -- skips to a particular track according to 'tr'
-    track = tr
-    if track > #disks or track < 1 then
-        return
-    end
-    restart()
-end
-
--- Function to handle monitor touch events
-function handleTouch(x, y)
-    if y > 1 and y <= #disks + 1 then -- a track was pressed
-        skipto(y - 1)
-    elseif x <= 2 then -- back was pressed
-        back()
-    elseif x == 4 then -- stop/play was pressed
-        if playing then
-            stop()
-        else
-            play()
+-- Function to handle mouse click events
+local function handleMouseClick(x, y)
+    -- Check if click is within track listing area
+    if x >= 1 and x <= screenWidth and y >= 2 and y <= screenHeight then
+        local trackIndex = y - 1  -- Convert y coordinate to track index
+        if disks[trackIndex] then
+            selectedTrack = trackIndex
+            -- Print selected track to console
+            print("Selected track: " .. disks[selectedTrack].audioTitle)
+            disk.stopAudio("right")
+            if disk.isPresent("right") then 
+                chest.pullItems("right", 1)
+            end
+            chest.pushItems("right", disks[selectedTrack].slot)
+            disk.playAudio("right")
+            
         end
-    elseif x == 6 or x == 7 then -- skip was pressed
-        skip()
-    elseif x == 9 then -- shuffle was pressed
-        shuffle = not shuffle
-    elseif x == 18 then -- secret close button was pressed
-        stop()
-        return
     end
 end
 
@@ -150,48 +98,26 @@ while true do
     mon.setBackgroundColor(colors.black)
     mon.clear()
 
-    -- Drawing buttons
+    -- Draw buttons and disk names
     mon.setCursorPos(1, 1)
     mon.setBackgroundColor(colors.blue)
-    mon.write("<- ")
-    if not playing then
-        mon.write("> ")
-    else
-        mon.write("O ")
-    end
-    mon.write("-> ")
-    if not shuffle then
-        mon.write("=")
-    else
-        mon.write("x")
-    end
-
-    -- Load disks again (in case new disks are added)
-    loadDisks()
 
     -- Draw track names
     for k, v in ipairs(disks) do
         mon.setCursorPos(1, k + 1)
-        if k == track then
+        if k == selectedTrack then
             mon.setBackgroundColor(colors.green)
         else
             mon.setBackgroundColor(colors.black)
         end
-        mon.write(v.displayName)
+        mon.write(v.audioTitle)
     end
 
-    -- Wait for event
-    local event, dev, cx, cy = os.pullEvent()
+    -- Wait for mouse click event
+    local event, side, x, y = os.pullEvent("monitor_touch")
     
-    -- Test event
-    if event == "timer" then -- the timer ended
-        if shuffle then
-            track = math.random(#disks)
-            restart()
-        else
-            skip()
-        end
-    elseif event == "monitor_touch" then -- monitor was touched
-        handleTouch(cx, cy)
+    -- Handle mouse click event
+    if event == "monitor_touch" then
+        handleMouseClick(x, y)
     end
 end
