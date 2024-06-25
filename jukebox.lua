@@ -20,44 +20,44 @@ lengths = {
 DEFAULT_LENGTH = 200
 
 -- Wrap the peripherals
-per=peripheral.getNames()
-drive=nil
-chest=nil
-mon=nil
+per = peripheral.getNames()
+drive = nil
+chest = nil
+mon = nil
 
 for k,v in pairs(per) do
-    if peripheral.getType(v)=="drive" then
-        drive=peripheral.wrap(v)
-    elseif peripheral.getType(v)=="monitor" then
-        mon=peripheral.wrap(v)
-    elseif peripheral.getType(v)=="minecraft:chest" then
-        chest=peripheral.wrap(v)
+    if peripheral.getType(v) == "drive" then
+        drive = peripheral.wrap(v)
+    elseif peripheral.getType(v) == "monitor" then
+        mon = peripheral.wrap(v)
+    elseif peripheral.getType(v) == "minecraft:chest" then
+        chest = peripheral.wrap(v)
     end
 end
-per=nil
+per = nil
 
 -- Check if peripherals are found
 if not drive or not chest or not mon then
     error("Drive, chest, or monitor not found")
 end
 
-disks={} -- the name of the disk in the chest
-diskSlots={} -- the corresponding slots of the disks in the chest
+disks = {} -- array of disk details {displayName, slot}
+diskSlots = {} -- corresponding slots of the disks in the chest
 
 -- Function to load disks from the chest
 function loadDisks()
     disks = {}
     diskSlots = {}
-    for slot=1, chest.size() do
+    for slot = 1, chest.size() do
         local item = chest.getItemDetail(slot)
         if item and item.name:find("music_disc") then
-            local title = item.displayName or item.name:gsub("music_disc_", "Music Disk - ") or "Unknown Disk"
-            disks[#disks+1] = title
+            local displayName = item.displayName or "Unknown Disk"
+            disks[#disks + 1] = {displayName = displayName, slot = slot}
             diskSlots[#disks] = slot
             
             -- Apply default length if the disk is unknown
-            if lengths[title] == nil then
-                lengths[title] = DEFAULT_LENGTH
+            if lengths[displayName] == nil then
+                lengths[displayName] = DEFAULT_LENGTH
             end
         end
     end
@@ -66,63 +66,89 @@ end
 -- Initial load of disks
 loadDisks()
 
-track=1 --selected track
-timer=0 --token of the timer that signals the end of a track
-playing=false --i'm not going to insult you by explaining this one
-shuffle=true --when true; selects a random track when track is over
+track = 1 -- selected track
+timer = 0 -- token of the timer that signals the end of a track
+playing = false -- indicates if a disk is currently playing
+shuffle = true -- when true; selects a random track when track is over
 
-function restart() --restarts playback (more useful than it sounds)
+function restart() -- restarts playback
     stop()
     play()
 end
 
-function stop() --stops playback
-    playing=false
+function stop() -- stops playback
+    playing = false
     os.cancelTimer(timer)
     drive.stopAudio()
 end
 
-function play() --starts playback
-    -- Swap the disk into the drive
-    local slot = diskSlots[track]
+function play() -- starts playback
+    if not disks[track] then
+        return -- if no disks are loaded, do nothing
+    end
+    
+    local slot = disks[track].slot
     chest.pushItems(peripheral.getName(drive), slot, 1, 1)
     os.sleep(1) -- Wait for the disk to transfer
-    playing=true
-    timer=os.startTimer(lengths[disks[track]])
+    playing = true
+    timer = os.startTimer(lengths[disks[track].displayName])
     drive.playAudio()
 end
 
-function skip() --skips to the next track
-    track=track+1
-    if track>#disks then
-        track=1
-    end
-    restart() --see?
-end
-
-function back() --goes back to the previous track
-    track=track-1
-    if track<1 then
-        track=#disks
+function skip() -- skips to the next track
+    track = track + 1
+    if track > #disks then
+        track = 1
     end
     restart()
 end
 
-function skipto(tr) --skips to a particular track according to 'tr'
-    track=tr
-    if track>#disks or track<1 then
+function back() -- goes back to the previous track
+    track = track - 1
+    if track < 1 then
+        track = #disks
+    end
+    restart()
+end
+
+function skipto(tr) -- skips to a particular track according to 'tr'
+    track = tr
+    if track > #disks or track < 1 then
         return
     end
     restart()
 end
 
-repeat --main loop
+-- Function to handle monitor touch events
+function handleTouch(x, y)
+    if y > 1 and y <= #disks + 1 then -- a track was pressed
+        skipto(y - 1)
+    elseif x <= 2 then -- back was pressed
+        back()
+    elseif x == 4 then -- stop/play was pressed
+        if playing then
+            stop()
+        else
+            play()
+        end
+    elseif x == 6 or x == 7 then -- skip was pressed
+        skip()
+    elseif x == 9 then -- shuffle was pressed
+        shuffle = not shuffle
+    elseif x == 18 then -- secret close button was pressed
+        stop()
+        return
+    end
+end
 
-    --refresh display
-    mon.setBackgroundColor(colors.black) --clearing
+-- Main loop
+while true do
+    -- Refresh display
+    mon.setBackgroundColor(colors.black)
     mon.clear()
 
-    mon.setCursorPos(1,1) --drawing back, play, skip, and shuffle
+    -- Drawing buttons
+    mon.setCursorPos(1, 1)
     mon.setBackgroundColor(colors.blue)
     mon.write("<- ")
     if not playing then
@@ -137,57 +163,29 @@ repeat --main loop
         mon.write("x")
     end
 
-    mon.setBackgroundColor(colors.black) --clearing the bits in between the buttons
-    mon.setCursorPos(3,1) --inefficient; I know.
-    mon.write(" ")
-    mon.setCursorPos(5,1)
-    mon.write(" ")
-    mon.setCursorPos(8,1)
-    mon.write(" ")
-
-    for k,v in pairs(disks) do --drawing tracks
-        if k==track then
+    -- Draw track names
+    for k, v in ipairs(disks) do
+        mon.setCursorPos(1, k + 1)
+        if k == track then
             mon.setBackgroundColor(colors.green)
         else
             mon.setBackgroundColor(colors.black)
         end
-        mon.setCursorPos(1,k+2)
-        mon.write(v)
+        mon.write(v.displayName)
     end
 
-    --wait for event
-    repeat
-        eve,dev,cx,cy=os.pullEvent()
-    until eve=="timer" or eve=="monitor_touch"
-
-    --test event
-    if eve=="timer" then --the timer ended
+    -- Wait for event
+    local event, dev, cx, cy = os.pullEvent()
+    
+    -- Test event
+    if event == "timer" then -- the timer ended
         if shuffle then
-            track=math.random(#disks)
+            track = math.random(#disks)
             restart()
         else
             skip()
         end
-
-    else --the monitor was pressed
-        if cy>1 then --a track was pressed
-            skipto(cy-2)
-        elseif cx<=2 then --back was pressed
-            back()
-        elseif cx==4 then --stop/play was pressed
-            if playing then
-                stop()
-            else
-                play()
-            end
-        elseif cx==6 or cx==7 then --skip was pressed
-            skip()
-        elseif cx==9 then --shuffle was pressed
-            shuffle=not shuffle
-        elseif cx==18 then --secret close button was pressed
-            stop()
-            return
-        end
+    elseif event == "monitor_touch" then -- monitor was touched
+        handleTouch(cx, cy)
     end
-
-until false
+end
