@@ -42,18 +42,15 @@ if not drive or not chest or not mon then
 end
 
 disks = {} -- array of disk details {displayName, slot}
-diskSlots = {} -- corresponding slots of the disks in the chest
 
 -- Function to load disks from the chest
 function loadDisks()
     disks = {}
-    diskSlots = {}
     for slot = 1, chest.size() do
         local item = chest.getItemDetail(slot)
         if item and item.name:find("music_disc") then
             local displayName = item.displayName or "Unknown Disk"
             disks[#disks + 1] = {displayName = displayName, slot = slot}
-            diskSlots[#disks] = slot
             
             -- Apply default length if the disk is unknown
             if lengths[displayName] == nil then
@@ -162,6 +159,9 @@ while true do
     else
         mon.write("x")
     end
+
+    -- Load disks again (in case new disks are added)
+    loadDisks()
 
     -- Draw track names
     for k, v in ipairs(disks) do
