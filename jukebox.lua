@@ -1,6 +1,6 @@
 -- Initialize variables and peripherals
 local disks = {}  -- Global array to store disk details {displayName, audioTitle, slot, length}
-local drive = peripheral.wrap("right")  -- Adjust disk drive side as per your setup
+local drive = peripheral.wrap("left")  -- Adjust disk drive side as per your setup
 local chest = peripheral.find("minecraft:chest")  -- Adjust chest side as per your setup
 local mon = peripheral.wrap("top")  -- Adjust monitor side as per your setup
 
@@ -36,7 +36,7 @@ local function loadDisks()
         local item = chest.getItemDetail(slot)
         if item then
             -- Push disk into disk drive
-            chest.pushItems("right", slot)
+            chest.pushItems("left", slot)
             
             -- Wait briefly to ensure disk is loaded (adjust timing as needed)
             os.sleep(1)  -- Adjust sleep time if necessary
@@ -45,7 +45,7 @@ local function loadDisks()
             local audioTitle = drive.getAudioTitle()
             
             -- Eject disk from the disk drive
-            chest.pullItems("right", 1)
+            chest.pullItems("left", 1)
             
             -- Determine display name (use DEFAULT_LENGTH if not found in lengths)
             local displayName = item.displayName or "Unknown Disk"
@@ -81,12 +81,12 @@ local function handleMouseClick(x, y)
             selectedTrack = trackIndex
             -- Print selected track to console
             print("Selected track: " .. disks[selectedTrack].audioTitle)
-            disk.stopAudio("right")
-            if disk.isPresent("right") then 
-                chest.pullItems("right", 1)
+            disk.stopAudio("left")
+            if disk.isPresent("left") then 
+                chest.pullItems("left", 1)
             end
-            chest.pushItems("right", disks[selectedTrack].slot)
-            disk.playAudio("right")
+            chest.pushItems("left", disks[selectedTrack].slot)
+            disk.playAudio("left")
             
         end
     end
