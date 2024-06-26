@@ -1,2 +1,2 @@
 -- runs the updater on startup.
-shell.run("main")
+shell.run("main.lua")
