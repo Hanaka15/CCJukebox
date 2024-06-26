@@ -35,9 +35,9 @@ if version_file then
     version_file:close()
     
     -- Get the version info from GitHub
-    local version_github = http.get(github .. "version.txt", {protocol = "https"})
+    local version_github = http.get(github .. "version.txt")
     if version_github then
-        local version_info = version_github.readAll()
+        local version_info = version_github.read()
         version_github.close()
         
         -- Check if the arg is "true"
